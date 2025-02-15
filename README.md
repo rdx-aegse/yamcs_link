@@ -66,7 +66,11 @@ Events are the natural next improvement which will be added later on as @event m
 ## Getting started
  
 - To develop a new application, using the files from yamcs_link/src standalone is the least involved way to get started. There are no dependencies required (tested with python 3.14), and yamcs_link.py contains an example of main program if run directly. However, a properly configured YAMCS instance will be needed for the script to succeed.
-- To test the demonstration script in yamcs_link.py, simply run run.sh at the root of the repository. [docker](https://docs.docker.com/engine/install) and [docker compose](https://docs.docker.com/compose/install/linux/#install-using-the-repository) are required. A YAMCS instance will be deployed, with which it will be possible to interact from any browser at 127.0.0.1:8090. YAMCS Studio can also be used instead of the web client. 
+- To test the demonstration script in yamcs_link.py, simply run run.sh at the root of the repository. [docker](https://docs.docker.com/engine/install) and [docker compose](https://docs.docker.com/compose/install/linux/#install-using-the-repository) are required. A YAMCS instance will be deployed, with which it will be possible to interact from any browser at 127.0.0.1:8090. YAMCS Studio can also be used instead of the web client.
+
+## Call to arms
+
+yamcs_link has been made by an occasional python developer "on the side"; although it seems to work well in our limited testing, it remains immature and would benefit from the reviews and contributions of experts - specifically in networking, yamcs, and obviously python. 
 
 ## Notes
 
