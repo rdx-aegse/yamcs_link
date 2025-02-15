@@ -1,4 +1,16 @@
-# yamcs_link.py
+# -*- coding: utf-8 -*-
+
+"""
+Module: yamcs_link.py
+
+Author: gmarchetx
+
+Created on: Thu Feb 13 16:46:35 2025
+
+"""
+
+#TODO: CLEAN UP THIS DOC AND DOCUMENT IT
+
 import socket
 import select
 import time
@@ -48,13 +60,13 @@ class YAMCS_link(YAMCSContainer):
         self.tcp_server_socket = None
         self.tcp_client_socket = None  # Socket connected to YAMCS
         self.udp_socket = None
-        self.address = ('localhost', self.udp_port)  # Destination address
+        self.address = ('localhost', self.udp_port)  # TM
         self.input_list = []  # List of sockets to monitor with select()
         self.last_tm_send_time = {}  # Track last telemetry send time for each period
         self.command_header_serder = SerDer(self.COMMAND_HEADER_FORMAT) 
         self.tm_header_serder = SerDer(self.TM_HEADER_FORMAT)
-        # Set up signal handling for graceful shutdown
         
+        # Set up signal handling for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
@@ -71,7 +83,7 @@ class YAMCS_link(YAMCSContainer):
         """Starts the TCP server and prepares for telemetry sending."""
         try:
             self.tcp_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.tcp_server_socket.setblocking(False)  # Non-blocking socket
+            self.tcp_server_socket.setblocking(False)  
             self.tcp_server_socket.bind(('localhost', self.tcp_port))
             self.tcp_server_socket.listen(1)
             logging.info(f"TCP server listening on port {self.tcp_port}")
@@ -155,13 +167,13 @@ class YAMCS_link(YAMCSContainer):
                         logging.info("Client disconnected.")
                         self.close_tcp_connection()
 
-            # Send telemetry if TCP link is active
+            # Send telemetry if TCP link is active (i.e. YAMCS is connected)
             if self.tcp_client_socket:
                 self.send_telemetry()
 
         except Exception as e:
             logging.error(f"Error in service loop: {e}")
-            self.close_tcp_connection()  # Ensure connection is closed on error
+            self.close_tcp_connection()  
 
     def send_telemetry(self):
         """Sends telemetry data over UDP at the defined periods."""
@@ -193,7 +205,6 @@ class YAMCS_link(YAMCSContainer):
         try:
             logging.info(f"Received command: {data.hex()}")
             
-            # Deserialize the command header using SerDer
             header = self.command_header_serder.deserialise(data)
 
             start_word = int(header['start_word'])
@@ -211,7 +222,6 @@ class YAMCS_link(YAMCSContainer):
                 logging.warning(f"Incomplete command received (expected length: {self.commands[opcode]['serder'].minsize}, received: {len(data)}). Dropping.")
                 return
 
-            # Call the telecommand in the YAMCS container
             result = self.call_tc(opcode, data[header_size:])
             logging.info(f"Command {opcode} (0x{opcode:X}) executed. Result: {result}")
 
@@ -275,21 +285,20 @@ if __name__ == '__main__':
             logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
             return 0
 
-    # Initialize YAMCS link
-    yamcs_link = YAMCS_link("my_link", tcp_port=YAMCS_TC_PORT, udp_port=YAMCS_TM_PORT) #Was creating the UDP ports in the receiving client
+    yamcs_link = YAMCS_link("my_link", tcp_port=YAMCS_TC_PORT, udp_port=YAMCS_TM_PORT) 
     my_component = MyComponent("component1")
     yamcs_link.register_yamcs_child(my_component)
 
-    # Generate MDB
-    yamcs_link.generate_mdb(DIR_MDB_OUT, MDB_NAME, VERSION) #Needs to be before binding
+    yamcs_link.generate_mdb(DIR_MDB_OUT, MDB_NAME, VERSION) 
+    #If for some reason you do not generate_mdb, do call update_index() before service()
 
     # Main loop
     try:
         while True:
+            #Possible to do things here if your app doesn't inherit from YAMCS_link
             yamcs_link.service() #Run TM sending and TC handling
             time.sleep(0.1) #Small delay to prevent busy-waiting
     except KeyboardInterrupt:
         logging.info("Exiting main loop.")
     finally:
-        #Close everything in this order
-        yamcs_link.shutdown() #Ensure proper shutdown
+        yamcs_link.shutdown() 
