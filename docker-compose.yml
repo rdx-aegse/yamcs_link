@@ -5,15 +5,15 @@ services:
     build:
       context: ./yamcs_link
     volumes:
-      - mdb_shared:/mdb_shared  # Shared volume for MDB files
+      - mdb_shared:/mdb_shared 
     network_mode: "host" #Easier for a test
 
   yamcs_server:
     build:
       context: ./yamcs_server
     volumes:
-      - mdb_shared:/mdb_shared  # Access to the same shared volume
+      - mdb_shared:/mdb_shared  
     network_mode: "host"
 
-volumes:  # Define volumes
-  mdb_shared:  # Define a volume for shared data between containers
+volumes: 
+  mdb_shared:  #This volume is shared between both containers and contains the yamcs mission databases that yamcs_link generates

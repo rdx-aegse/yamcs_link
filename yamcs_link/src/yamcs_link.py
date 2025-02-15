@@ -3,13 +3,15 @@
 """
 Module: yamcs_link.py
 
+Main module, see README.md for more information
+
 Author: gmarchetx
 
 Created on: Thu Feb 13 16:46:35 2025
 
 """
 
-#TODO: CLEAN UP THIS DOC AND DOCUMENT IT
+### Import and config #############################################################################################################
 
 import socket
 import select
@@ -22,8 +24,10 @@ from yamcs_userlib import YAMCSContainer
 from yamcs_mdb_gen import YAMCSMDBGen
 from utils import SerDer
 
-# Configure logging
+# Configure logging - TODO: feels odd having this here, to be checked
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+### Public classes #############################################################################################################
 
 class YAMCS_link(YAMCSContainer):
     """
@@ -31,47 +35,56 @@ class YAMCS_link(YAMCSContainer):
     telemetry sending and telecommand receiving in a single-threaded manner.
     """
 
+    #Describes the format of the command header (to be deserialised, uses the dict structure of SerDer)
     COMMAND_HEADER_FORMAT = [
         {'name': 'start_word', 'type': 'U32'},
-        {'name': 'opcode', 'type': YAMCSMDBGen.OPCODE_TYPE}
+        {'name': 'opcode', 'type': YAMCSMDBGen.OPCODE_TYPE} #Opcodes are present in mdbs
     ]
+    #Start word of commands received
     START_WORD = 0xFEEDCAFE
+    #Describes the format of the telemetry header (to be serialised, uses the dict structure of SerDer)
     TM_HEADER_FORMAT = [
-        {'name': 'PacketType', 'type': YAMCSMDBGen.PACKETTYPE_TYPE}, #PacketType to support events in the future
-        {'name': 'PacketID', 'type': YAMCSMDBGen.PACKETID_TYPE} #PacketID to determine the format (id = index of TM refresh interval)
+        {'name': 'PacketType', 'type': YAMCSMDBGen.PACKETTYPE_TYPE}, #PacketType, to support events in the future. Present in mdbs
+        {'name': 'PacketID', 'type': YAMCSMDBGen.PACKETID_TYPE} #PacketID to determine the format (id = index of TM refresh interval). Present in mdbs.
     ]
+    #VAlue of the packet type field in an outgoing packet header, when the packet is TM (not events)
     TM_PACKETTYPE_VAL = YAMCSMDBGen.PACKETTYPE_TLM
-    
+    #Maximum size in bytes of a packet, buffer size for recv()
     MAX_PACKET_SIZE = 1024
 
-    def __init__(self, name, tcp_port: int, udp_port: int):
+    def __init__(self, name : str, tcp_port: int, udp_port: int):
         """
         Initializes the YAMCS_link with a YAMCSContainer and TCP/UDP ports.
 
         Args:
-            yamcs_container: The YAMCSContainer holding telemetry and telecommands.
+            name: the name of the yamcs_link, will become the root of the full name of tm and tc
             tcp_port: The TCP port to listen for commands from YAMCS.
             udp_port: The UDP port to send telemetry to YAMCS.
         """
         super().__init__(name)
+        
+        #Serialisers/deserialisers are used to simplify sending/receiving in fixed formats
+        #Set them up for tm and tc to speed up execution 
+        self.command_header_serder = SerDer(self.COMMAND_HEADER_FORMAT) 
+        self.tm_header_serder = SerDer(self.TM_HEADER_FORMAT)
+        # Tracks last telemetry send time for each period, will be filled in in update_index()
+        self.last_tm_send_time = {}  
 
+        #Sockets initialisation
         self.tcp_port = tcp_port
         self.udp_port = udp_port
         self.tcp_server_socket = None
         self.tcp_client_socket = None  # Socket connected to YAMCS
         self.udp_socket = None
-        self.address = ('localhost', self.udp_port)  # TM
-        self.input_list = []  # List of sockets to monitor with select()
-        self.last_tm_send_time = {}  # Track last telemetry send time for each period
-        self.command_header_serder = SerDer(self.COMMAND_HEADER_FORMAT) 
-        self.tm_header_serder = SerDer(self.TM_HEADER_FORMAT)
-        
-        # Set up signal handling for graceful shutdown
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        
+        self.udp_target = ('localhost', self.udp_port)  # TM
+        self.monitored_sock = []  # List of sockets to monitor with select()
+        #Opening sockets
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._start_tcp_server()
+        
+        # Set up signal handling for  graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
 
     def _signal_handler(self, sig, frame):
         """Handles signals for graceful shutdown."""
@@ -80,21 +93,20 @@ class YAMCS_link(YAMCSContainer):
         sys.exit(0)
         
     def _start_tcp_server(self):
-        """Starts the TCP server and prepares for telemetry sending."""
+        """Starts the TCP server to listen for connection requests from YAMCS"""
         try:
+            logging.info(f"Starting TCP server on port {self.tcp_port}... ")
+            
             self.tcp_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.tcp_server_socket.setblocking(False)  
+            self.tcp_server_socket.setblocking(False) #No blocking because single-threaded app
             self.tcp_server_socket.bind(('localhost', self.tcp_port))
             self.tcp_server_socket.listen(1)
-            logging.info(f"TCP server listening on port {self.tcp_port}")
-
-            self.input_list = [self.tcp_server_socket]  # Start monitoring the server socket
-            self.running = True
-
-            logging.info("YAMCS_link started. Press Ctrl+C to shutdown.")
+            self.monitored_sock = [self.tcp_server_socket]  # Start monitoring the server socket
+            
+            logging.info(f"Started. Listening for client connections")
 
         except Exception as e:
-            logging.error(f"Error starting YAMCS_link: {e}")
+            logging.error(f"Error starting TCP server: {e}")
             self.shutdown()
             sys.exit(1)
 
@@ -107,6 +119,8 @@ class YAMCS_link(YAMCSContainer):
             name_mdb: The name of the mission database.
             version: The version of the mission database.
         """
+        #Build the tm and tc data from all the YAMCSObject objects that have been registered to this link before generation
+        #this is the only time this is done in the library, because generating the mdb is assumed to be done at every execution prior to opening the sockets
         self.update_index()
 
         try:
@@ -132,13 +146,14 @@ class YAMCS_link(YAMCSContainer):
                     command.addParam(arg_name, arg_type)
                 mdb_generator.addTMTC(command)
 
-            mdb_generator.validate()
             mdb_generator.generateCSVs()
 
-            logging.info(f"Mission database generated successfully in {output_dir}")
+            logging.info(f"Mission database {name_mdb} generated successfully in {output_dir}")
 
         except Exception as e:
             logging.error(f"Error generating mission database: {e}")
+            self.shutdown()
+            sys.exit(1)
 
     def service(self):
         """
@@ -146,16 +161,18 @@ class YAMCS_link(YAMCSContainer):
         This method should be called repeatedly in a main loop.
         """
         try:
-            # Use select() to monitor sockets for readability
-            readable, _, _ = select.select(self.input_list, [], [], 0.1)  # 100ms timeout
+            # Select takes care of monitoring for incoming data in the monitored sockets
+            # i.e. either the server socket (listening for connection requests) or the client socket
+            # created after the connection's been accepted (listening for commands)
+            readable, _, _ = select.select(self.monitored_sock, [], [], 0.1)  # 100ms timeout; TODO: turn this into a constant
 
             for sock in readable:
                 if sock is self.tcp_server_socket:
                     # Accept new connection
                     conn, addr = self.tcp_server_socket.accept()
                     self.tcp_client_socket = conn
-                    self.tcp_client_socket.setblocking(False)
-                    self.input_list.append(self.tcp_client_socket)  # Monitor the new client socket
+                    self.tcp_client_socket.setblocking(False) #non blocking because single threaded app
+                    self.monitored_sock.append(self.tcp_client_socket)  # Monitor the new client socket
                     logging.info(f"Accepted connection from {addr}")
                 elif sock is self.tcp_client_socket:
                     # Handle data from the client
@@ -167,7 +184,7 @@ class YAMCS_link(YAMCSContainer):
                         logging.info("Client disconnected.")
                         self.close_tcp_connection()
 
-            # Send telemetry if TCP link is active (i.e. YAMCS is connected)
+            # Service telemetry whenever the TCP link is active (i.e. YAMCS is connected)
             if self.tcp_client_socket:
                 self.send_telemetry()
 
@@ -176,27 +193,43 @@ class YAMCS_link(YAMCSContainer):
             self.close_tcp_connection()  
 
     def send_telemetry(self):
-        """Sends telemetry data over UDP at the defined periods."""
+        """
+        Telemetry are grouped in fixed sequences by refresh period. 
+        Check if any group is due for sending, and if it is serialise the telemetry sequence, packetize it and send it
+        """
         try:
             current_time = time.time()
             for i_period, period in enumerate(self.get_tm_periods()):
+                #If last_tm_send_time does not exist for that period, initialise it
                 if period not in self.last_tm_send_time:
                     self.last_tm_send_time[period] = 0
 
+                #if this tm group is due for sending
                 if current_time - self.last_tm_send_time[period] >= period:
+                    #Update and retrieve the serialised tm data (TODO: rename method) for that group
                     tm_data = self.get_tm_values(period)
                     if tm_data:
+                        #Serialise the header i.e. the packet type (TM) and the packet id (index of the group)
                         header_bytes = self.tm_header_serder.serialise([self.TM_PACKETTYPE_VAL, i_period])
-                        self.udp_socket.sendto(header_bytes+bytes(tm_data), self.address)
+                        #Append the tm data and send it
+                        self.udp_socket.sendto(header_bytes+bytes(tm_data), self.udp_target)
+                    #If the tm data is empty, this still counts as sending
                     self.last_tm_send_time[period] = current_time
         except Exception as e:
             logging.error(f"Telemetry sending error: {e}")
 
     def handle_command(self, data: bytes):
-        """Handles incoming command data from the TCP connection."""
+        """
+        Handles incoming command data from the TCP connection.
+        
+        Args:
+            data: byte stream coming directly from YAMCS
+        """
         
         #TODO: TCP is a streaming protocol, support segmentation at any point in a command
+        #Should be fine in the meantime if commands are not sent as bursts
 
+        #Check there is enough data to check the header at least
         header_size = self.command_header_serder.minsize
         if len(data) < header_size:
             logging.warning("Incomplete command received (too short). Dropping.")
@@ -205,25 +238,30 @@ class YAMCS_link(YAMCSContainer):
         try:
             logging.info(f"Received command: {data.hex()}")
             
+            #Deserialise the header and check the start word
+            
             header = self.command_header_serder.deserialise(data)
-
+            
             start_word = int(header['start_word'])
             if start_word != self.START_WORD:
                 logging.warning(f"Invalid start word: 0x{start_word:X}. Dropping command.")
                 return
 
+            #Check the opcode is allowed
             opcode = header['opcode']
-            
             if(opcode >= len(self.commands)):
                 logging.warning("Command opcode is out of bounds, ignoring command.")
                 return
 
+            #Based on the opcode, check the size of the command is expected (driven by arguments data)
             if len(data) < header_size+self.commands[opcode]['serder'].minsize:
                 logging.warning(f"Incomplete command received (expected length: {self.commands[opcode]['serder'].minsize}, received: {len(data)}). Dropping.")
                 return
 
+            #If all's well execute the command (will call the appropriate bound method tagged by @telecommand)
             result = self.call_tc(opcode, data[header_size:])
-            logging.info(f"Command {opcode} (0x{opcode:X}) executed. Result: {result}")
+            
+            logging.info(f"Command {opcode} (0x{opcode:X}) {self.commands[opcode]['fullname']} executed. Result: {result}")
 
         except Exception as e:
             logging.error(f"Command handling error: {e}")
@@ -253,17 +291,18 @@ class YAMCS_link(YAMCSContainer):
 ### Unit testing and usage #################################################################################
 
 if __name__ == '__main__':
-    # Example Usage
     from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32
     from enum import Enum
 
-    #Ports
+    #Constants
     YAMCS_TC_PORT = 10000
     YAMCS_TM_PORT = 10001
     DIR_MDB_OUT = "/mdb_shared"
     MDB_NAME = "test"
     VERSION = "1.0"
 
+    #Dummy example app definition
+    
     class MyEnum(Enum):
         VALUE1=1
         VALUE2=2
@@ -272,11 +311,11 @@ if __name__ == '__main__':
         def __init__(self, name):
             YAMCSObject.__init__(self, name)
 
-        @telemetry(1)
+        @telemetry(1) #seconds period
         def my_telemetry1(self) -> MyEnum:
             return MyEnum.VALUE1.value
 
-        @telemetry(2)
+        @telemetry(2) #seconds period
         def my_telemetry2(self) -> U8:
             return 42
 
@@ -284,19 +323,22 @@ if __name__ == '__main__':
         def my_command(self, arg1: U16, arg2: F32) -> U8:
             logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
             return 0
-
+        
+    #initialisation
     yamcs_link = YAMCS_link("my_link", tcp_port=YAMCS_TC_PORT, udp_port=YAMCS_TM_PORT) 
     my_component = MyComponent("component1")
     yamcs_link.register_yamcs_child(my_component)
 
+    #Generate mdb is necessary for YAMCS to know how to interact with the app. 
+    # Make sure there is an automated process for yamcs to start up from those updated mdb
     yamcs_link.generate_mdb(DIR_MDB_OUT, MDB_NAME, VERSION) 
-    #If for some reason you do not generate_mdb, do call update_index() before service()
+    #If the mdb is generated through some other scheme, manually do call update_index() between register_yamcs_child() and service()
 
     # Main loop
     try:
         while True:
-            #Possible to do things here if your app doesn't inherit from YAMCS_link
-            yamcs_link.service() #Run TM sending and TC handling
+            #Possible to do things here e.g. if your app doesn't inherit from YAMCS_link
+            yamcs_link.service() #Send due TM and process pending command then return
             time.sleep(0.1) #Small delay to prevent busy-waiting
     except KeyboardInterrupt:
         logging.info("Exiting main loop.")

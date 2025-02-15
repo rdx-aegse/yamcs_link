@@ -1,9 +1,21 @@
 # yamcs_link
 
-Python library to facilitate creating applications interacting with a YAMCS server. 
+Python library to facilitate creating applications interacting with a YAMCS server. Targets simple applications to speed up getting started and avoid reinventing the wheel.
 
-Example:
+Example application:
 ```
+from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32
+from enum import Enum
+
+#Constants
+YAMCS_TC_PORT = 10000
+YAMCS_TM_PORT = 10001
+DIR_MDB_OUT = "/mdb_shared"
+MDB_NAME = "test"
+VERSION = "1.0"
+
+#Dummy example app definition
+
 class MyEnum(Enum):
     VALUE1=1
     VALUE2=2
@@ -12,11 +24,11 @@ class MyComponent(YAMCSObject):
     def __init__(self, name):
         YAMCSObject.__init__(self, name)
 
-    @telemetry(1)
+    @telemetry(1) #seconds period
     def my_telemetry1(self) -> MyEnum:
         return MyEnum.VALUE1.value
 
-    @telemetry(2)
+    @telemetry(2) #seconds period
     def my_telemetry2(self) -> U8:
         return 42
 
@@ -24,19 +36,22 @@ class MyComponent(YAMCSObject):
     def my_command(self, arg1: U16, arg2: F32) -> U8:
         logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
         return 0
-
+    
+#initialisation
 yamcs_link = YAMCS_link("my_link", tcp_port=YAMCS_TC_PORT, udp_port=YAMCS_TM_PORT) 
 my_component = MyComponent("component1")
 yamcs_link.register_yamcs_child(my_component)
 
+#Generate mdb is necessary for YAMCS to know how to interact with the app. 
+# Make sure there is an automated process for yamcs to start up from those updated mdb
 yamcs_link.generate_mdb(DIR_MDB_OUT, MDB_NAME, VERSION) 
-#If for some reason you do not generate_mdb, do call update_index() before service()
+#If the mdb is generated through some other scheme, manually do call update_index() between register_yamcs_child() and service()
 
 # Main loop
 try:
     while True:
-        #Possible to do things here if your app doesn't inherit from YAMCS_link
-        yamcs_link.service() #Run TM sending and TC handling
+        #Possible to do things here e.g. if the app doesn't inherit from YAMCS_link
+        yamcs_link.service() #Send due TM and process pending command then return
         time.sleep(0.1) #Small delay to prevent busy-waiting
 except KeyboardInterrupt:
     logging.info("Exiting main loop.")
@@ -44,9 +59,9 @@ finally:
     yamcs_link.shutdown() 
 ```
 
-YAMCS_link runs the application, and any object inheriting from either YAMCSObject or YAMCSContainer can be registered in the link to attach its method tagged with the @telemetry or @telecommand decorators. Use YAMCSContainers if your application has hierarchical components that should be reflected in YAMCS, YAMCSObjects everywhere else. As long as the register_yamcs_child() chain is not broken between YAMCS_link and your component, it will be connected to YAMCS. 
+YAMCS_link runs the application, and any object inheriting from either YAMCSObject or YAMCSContainer can be registered in the link to attach its method tagged with the @telemetry or @telecommand decorators. Use YAMCSContainers if the application has hierarchical components that should be reflected in YAMCS, YAMCSObjects everywhere else. As long as the register_yamcs_child() chain is not broken between YAMCS_link and components, they will be connected to YAMCS. 
 
-Events are the natural next improvement which will be added later on. 
+Events are the natural next improvement which will be added later on as @event methods which are called from within the components to trigger events.  
 
 ## Getting started
  

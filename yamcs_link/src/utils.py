@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Module: serder.py
+Module: utils.py
 
 Description: Provides a class, SerDer, for serializing and deserializing data structures
-into byte streams and back using the struct module.
+into byte streams and back using the struct module. 
 
-Author: GregoireMarchetaux
+Author: gmarchetx
 Created on: Thu Feb 13 16:46:35 2025
 """
 
@@ -87,55 +87,6 @@ class SerDer:
         """
         unpacked = struct.unpack(self.format, byte_stream if exact_length else byte_stream[:self.minsize])
         return {field['name']: value for field, value in zip(self.fields, unpacked)}
-
-class FormatDeformat:
-    """
-    A class for formatting and deformatting strings based on a template.  This is useful
-    for converting structured data into human-readable strings and vice versa.  The template
-    uses curly braces {} to denote fields that will be replaced during formatting or
-    extracted during deformatting.
-    """
-    def __init__(self, template: str):
-        """
-        Initializes the FormatDeformat object with a template string.
-
-        Args:
-            template (str): The template string with placeholders for formatting and deformatting.
-                           Placeholders should be enclosed in curly braces, e.g., "{field_name}".
-        """
-        self.template = template
-        self.pattern = re.sub(r'\{(\w+)\}', r'(?P<\1>.*)', template)
-        
-    def format(self, **kwargs) -> str:
-        """
-        Formats the template string using the provided keyword arguments.
-
-        Args:
-            **kwargs: Keyword arguments where keys are field names and values are the
-                      values to be inserted into the template.
-
-        Returns:
-            str: The formatted string.
-
-        Raises:
-            KeyError: If a field name in the template is not provided as a keyword argument.
-        """
-        return self.template.format(**kwargs)
-
-    def deformat(self, formatted_string: str) -> Dict[str, str]:
-        """
-        Deformats a string based on the template, extracting field values into a dictionary.
-
-        Args:
-            formatted_string (str): The string to be deformatted.
-
-        Returns:
-            dict: A dictionary where keys are field names and values are the extracted
-                  values from the string. Returns an empty dictionary if the string
-                  does not match the template. The user must cast the strings to the appropriate type.
-        """
-        match = re.match(self.pattern, formatted_string)
-        return match.groupdict() if match else {}
     
 ### Unit testing and usage #################################################################################
     
@@ -160,17 +111,3 @@ if __name__ == "__main__":
     # Deserialise
     deserialised = packer.deserialise(serialised)
     print(deserialised)
-    
-    print("---- FormatDeformat -----")
-    
-    # Usage example for FormatDeformat:
-    template = "{a}_{b}-{c}"
-    formatter = FormatDeformat(template)
-
-    # Format
-    formatted = formatter.format(a=1, b=23.5, c="OK")
-    print("Formatted:", formatted)
-
-    # Deformat
-    deformatted = formatter.deformat(formatted)
-    print("Deformatted:", deformatted)
