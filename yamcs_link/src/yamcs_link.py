@@ -221,7 +221,6 @@ class YAMCS_link(YAMCSContainer):
     def close_tcp_connection(self):
         """Closes the TCP connection and cleans up."""
         if self.tcp_client_socket:
-            self.input_list.remove(self.tcp_client_socket)
             self.tcp_client_socket.close()
             self.tcp_client_socket = None
             logging.info("TCP connection closed.")
@@ -231,7 +230,6 @@ class YAMCS_link(YAMCSContainer):
         self.close_tcp_connection()
 
         if self.tcp_server_socket:
-            self.input_list.remove(self.tcp_server_socket)
             self.tcp_server_socket.close()
             logging.info("TCP server socket closed.")
 
@@ -273,8 +271,9 @@ if __name__ == '__main__':
             return 42
 
         @telecommand
-        def my_command(self, arg1: U16, arg2: F32) -> None:
-            print(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
+        def my_command(self, arg1: U16, arg2: F32) -> U8:
+            logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
+            return 0
 
     # Initialize YAMCS link
     yamcs_link = YAMCS_link("my_link", tcp_port=YAMCS_TC_PORT, udp_port=YAMCS_TM_PORT) #Was creating the UDP ports in the receiving client
