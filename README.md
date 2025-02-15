@@ -70,4 +70,4 @@ Events are the natural next improvement which will be added later on as @event m
 
 ## Notes
 
-Note that the YAMCS mission databases are generated as CSV files, which are then compiled into a single XLS by the yamcs_server application. The server application waits for the CSV files to appear in their dedicated folder (in a shared volume between both containers), then proceeds to launching YAMCS. 
+Note that the YAMCS mission databases are generated as CSV files. Since YAMCS expects XLS files, in this demonstration the CSVs are compiled into a single XLS by the yamcs_server application. The server application waits for the CSV files to appear in their dedicated folder (in a shared volume between both containers), then proceeds to launching YAMCS. 
