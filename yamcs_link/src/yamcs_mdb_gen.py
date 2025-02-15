@@ -3,7 +3,7 @@ Created on Mon Feb  3 2025
 
 See YAMCSMDBGen description
 
-@author: GregoireMarchetaux
+@author: gmarchetx
 """
 
 ### Imports #########################################################################################

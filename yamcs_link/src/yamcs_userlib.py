@@ -8,7 +8,7 @@ within the YAMCS framework. Simplifies the creation and management of telemetry
 and telecommand definitions using Python annotations, abstracting the underlying
 data serialization and deserialization.
 
-Author: GregoireMarchetaux
+Author: gmarchetx
 
 Created on: Thu Feb 13 16:46:35 2025
 
