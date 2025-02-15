@@ -3,7 +3,7 @@
 Python library to facilitate creating applications interacting with a YAMCS server. Targets simple applications to speed up getting started and avoid reinventing the wheel.
 
 Example application:
-```
+```python
 from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32
 from enum import Enum
 
