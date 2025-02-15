@@ -175,7 +175,7 @@ class YAMCS_link(YAMCSContainer):
                     tm_data = self.get_tm_values(period)
                     if tm_data:
                         header_bytes = self.tm_header_serder.serialise([self.TM_PACKETTYPE_VAL, i_period])
-                        self.udp_socket.sendto(header_bytes+tm_data, self.address)
+                        self.udp_socket.sendto(header_bytes+bytes(tm_data), self.address)
                     self.last_tm_send_time[period] = current_time
         except Exception as e:
             logging.error(f"Telemetry sending error: {e}")
@@ -231,6 +231,7 @@ class YAMCS_link(YAMCSContainer):
         self.close_tcp_connection()
 
         if self.tcp_server_socket:
+            self.input_list.remove(self.tcp_server_socket)
             self.tcp_server_socket.close()
             logging.info("TCP server socket closed.")
 
@@ -249,8 +250,11 @@ if __name__ == '__main__':
     from enum import Enum
 
     #Ports
-    YAMCS_TM_PORT = 8001
-    YAMCS_TC_PORT = 8000
+    YAMCS_TC_PORT = 10000
+    YAMCS_TM_PORT = 10001
+    DIR_MDB_OUT = "/mdb_shared"
+    MDB_NAME = "test"
+    VERSION = "1.0"
 
     class MyEnum(Enum):
         VALUE1=1
@@ -278,7 +282,7 @@ if __name__ == '__main__':
     yamcs_link.register_yamcs_child(my_component)
 
     # Generate MDB
-    yamcs_link.generate_mdb("mdb_output", "my_mdb", "1.0") #Needs to be before binding
+    yamcs_link.generate_mdb(DIR_MDB_OUT, MDB_NAME, VERSION) #Needs to be before binding
 
     # Main loop
     try:

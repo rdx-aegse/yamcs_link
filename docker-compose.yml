@@ -6,11 +6,6 @@ services:
       context: ./yamcs_link
     volumes:
       - mdb_shared:/mdb_shared  # Shared volume for MDB files
-    healthcheck:
-      test: ["CMD", "sh", "-c", "ls -A /mdb_shared"] #MDBs have been generated (i.e. directory is not empty)
-      interval: 5s
-      timeout: 3s
-      retries: 3
     network_mode: "host" #Easier for a test
 
   yamcs_server:
@@ -19,9 +14,6 @@ services:
     volumes:
       - mdb_shared:/mdb_shared  # Access to the same shared volume
     network_mode: "host"
-    depends_on:
-      yamcs_link_test:  # Ensure labyamcs starts before yamcsServer
-        condition: service_healthy #And that the MDBs have been generated
 
 volumes:  # Define volumes
   mdb_shared:  # Define a volume for shared data between containers

@@ -174,7 +174,7 @@ class YAMCSContainer(YAMCSObject):
             'serder': serder
         })
         
-    def _get_potential_enum_repr_type(self, type: str) -> str:
+    def _get_potential_enum_repr_type(self, typ: str) -> str:
         """
         Unveil the representation type of an enum when applicable
         Any non-basic type will be interpreted as an enum
@@ -185,20 +185,21 @@ class YAMCSContainer(YAMCSObject):
         Return:
             new type str
         """
-        return type if type in SerDer.PACK_FORMATS else self.ENUM_REPR_TYPE
+        #Assumes typ can only be an enum if it's not in PACK_FORMATS which is not ideal.
+        #Enum may not be declared at this point in the current implementation, and in the current implementation self.get_enums() cannot be used yet
+        return typ if typ in SerDer.PACK_FORMATS else self.ENUM_REPR_TYPE 
     
-    def _cast_potential_enum_val(self, value: Union[int, float, Enum], type: str) -> Union[int, float]:
+    def _cast_potential_enum_val(self, value: Union[int, float, Enum]) -> Union[int, float]:
         """
         Casts a value to its underlying representation if it is an enum.
         
         Args: 
             value: int, float, or of a type inheriting from Enum
-            type: string representation among SerDer.PACK_FORMATS or the name of the enum if applicable
             
         Return:
             new value
         """
-        return value.value if type in self.get_enums() else value
+        return value.value if isinstance(value, Enum) else value
 
     def get_enums(self) -> Dict[str, Dict[str, int]]:
         """
@@ -239,7 +240,7 @@ class YAMCSContainer(YAMCSObject):
         for tm in self.telemetry[period]:
             serialized = tm['serder'].serialise([
                 #SerDer will expect the enum represetnation type, so it is necessary to cast enums to that representation type
-                self._cast_potential_enum_val(tm['bndmethod'](), tm['bndmethod']._yamcs_return_type)
+                self._cast_potential_enum_val(tm['bndmethod']())
             ])
             values.extend(serialized)
         return values
