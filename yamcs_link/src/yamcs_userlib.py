@@ -37,6 +37,12 @@ class YAMCSObject:
         """
         # TODO: enforce allowed characters
         self.yamcs_name = name
+        
+    def on_disconnect(self):
+        '''
+        Called when YAMCS is disconnected, meant for the yamcs object to get back to a safe state upon disconnection.
+        '''
+        pass
 
 class YAMCSContainer(YAMCSObject):
     """
