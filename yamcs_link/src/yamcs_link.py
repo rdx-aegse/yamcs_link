@@ -142,8 +142,8 @@ class YAMCS_link(YAMCSContainer):
             tc_def = self.get_tc_def()
             for opcode, tc in tc_def.items():
                 command = mdb_generator.Command(name=tc['name'], opcode=opcode)
-                for arg_name, arg_type in tc['args'].items():
-                    command.addParam(arg_name, arg_type)
+                for arg_name, arg_info in tc['args'].items():
+                    command.addParam(arg_name, arg_info['type'], min=arg_info['min'], max=arg_info['max'])
                 mdb_generator.addTMTC(command)
 
             mdb_generator.generateCSVs()
@@ -291,7 +291,7 @@ class YAMCS_link(YAMCSContainer):
 ### Unit testing and usage #################################################################################
 
 if __name__ == '__main__':
-    from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32
+    from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32, I16
     from enum import Enum
 
     #Constants
@@ -319,9 +319,14 @@ if __name__ == '__main__':
         def my_telemetry2(self) -> U8:
             return 42
 
-        @telecommand
+        @telecommand()
         def my_command(self, arg1: U16, arg2: F32) -> U8:
             logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
+            return 0
+        
+        @telecommand(arg1=[5,10], arg2=[None,1000], arg3=[0,None])
+        def my_command2(self, arg1: U16, arg2: I16, arg3: F32) -> U8:
+            logging.info(f'MyComponent.my_command2 was invoked on {self.yamcs_name} with args {arg1}, {arg2}, {arg3}')
             return 0
         
     #initialisation
