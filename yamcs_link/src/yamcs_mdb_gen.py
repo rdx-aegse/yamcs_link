@@ -258,7 +258,7 @@ class YAMCSMDBGen:
         "I64": ("int", "int", "64"),
         "F32": ("float", "float", "32"),
         "F64": ("float", "float", "64"),
-        "string(\d+)": ("string","string","8*{}") #This one has a regex pattern and a formula around the captured value
+        r"string(\d+)": ("string","string","8*{}") #This one has a regex pattern and a formula around the captured value
     }
     
     #In TYPES_MAP, which type those variables are represented by. 
@@ -269,6 +269,8 @@ class YAMCSMDBGen:
     PACKETTYPE_TYPE = 'U32'
     #The value of the packet type for TM packets. Required to write in the mission database which packets should be captured
     PACKETTYPE_TLM = 1
+    #Same for events (even if this value is not used here, this centralises changes as it is used by yamcs_link.py). TODO: turn this into a dict
+    PACKETTYPE_EVENT = 2
     
     #YAMCS doesn't support certain characters in parameter names etc. Use this map to make replacements in all names.
     #Currently cannot include [ ] { } ;

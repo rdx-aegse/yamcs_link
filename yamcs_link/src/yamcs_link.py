@@ -19,8 +19,9 @@ import time
 import signal
 import sys
 import logging
+from typing import override
 
-from yamcs_userlib import YAMCSContainer  
+from yamcs_userlib import YAMCSContainer, EventSeverity
 from yamcs_mdb_gen import YAMCSMDBGen
 from utils import SerDer
 
@@ -49,6 +50,25 @@ class YAMCS_link(YAMCSContainer):
     ]
     #VAlue of the packet type field in an outgoing packet header, when the packet is TM (not events)
     TM_PACKETTYPE_VAL = YAMCSMDBGen.PACKETTYPE_TLM
+    
+    #Value of the packet type field in an outgoing packet header, when the packet is an event
+    EVENTS_PACKETTYPE_VAL = YAMCSMDBGen.PACKETTYPE_EVENT
+    #Size of the buffer for the source of any event = max length of the full source name (YAMCSObject.yamcs_name) including the terminating char
+    EVENT_SOURCESTR_SIZE = 80
+    #Size of the buffer for the message of any event = max length of the message of any event including the terminating char
+    EVENT_MSG_SIZE = 256
+    #Corresponding YAMCS data types for event strings
+    EVENT_MSG_TYPE = f"string{EVENT_MSG_SIZE}"
+    EVENT_SOURCESTR_TYPE = f"string{EVENT_SOURCESTR_SIZE}"
+    #Describes the format of the full event message (to be serialised, uses the dict structure of SerDer)
+    EVENT_PACKET_FORMAT = [
+        {'name': 'PacketType', 'type': YAMCSMDBGen.PACKETTYPE_TYPE}, #PacketType, to allow multiplexing events and TM
+        {'name': 'PacketID', 'type': YAMCSMDBGen.PACKETID_TYPE}, #PacketID, to comply with the same abstract packet format of TM when they go through the same preprocessor
+        {'name': 'severity', 'type': 'U8'}, #Severity among yamcs_userlib.EventSeverity enum
+        {'name': 'source', 'type': EVENT_SOURCESTR_TYPE}, #Name of the source of the event
+        {'name': 'message', 'type': EVENT_MSG_TYPE}, #Formatted message for the event
+    ]
+    
     #Maximum size in bytes of a packet, buffer size for recv()
     MAX_PACKET_SIZE = 1024
 
@@ -64,9 +84,10 @@ class YAMCS_link(YAMCSContainer):
         super().__init__(name)
         
         #Serialisers/deserialisers are used to simplify sending/receiving in fixed formats
-        #Set them up for tm and tc to speed up execution 
+        #Set them up for tm, tc and events to speed up execution 
         self.command_header_serder = SerDer(self.COMMAND_HEADER_FORMAT) 
         self.tm_header_serder = SerDer(self.TM_HEADER_FORMAT)
+        self.event_serder = SerDer(self.EVENT_PACKET_FORMAT)
         # Tracks last telemetry send time for each period, will be filled in in update_index()
         self.last_tm_send_time = {}  
 
@@ -265,6 +286,28 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Command handling error: {e}")
+        
+    @override    
+    def send_event(self, severity: EventSeverity, source: str, message: str):
+        '''
+        When a method tagged by the @event decorator gets called, send_event() in the base class YAMCSCOntainer just passes the event up the chain. 
+        This override is meant to actually send the event to YAMCS when it the event has reached this point in the chain.
+        
+        Args:
+            severity: severity specified in the argument of the @event decorator
+            source: yamcs_name of the source instance
+            message: pre-formatted event message 
+        '''
+        #Let's use the TM packet serder to make the preprocessor checks easier, the packet ID will just be 0 for events. 
+        #The packet type is different from the TM packet types, this is what will separate packets on the other end.
+        #Currently, the time stamp is given by YAMCS when receiving the event packet
+        self.udp_socket.sendto(self.event_serder.serialise([
+                self.EVENTS_PACKETTYPE_VAL, 
+                0, #Packet ID is unused
+                severity.value,
+                source,
+                message
+            ]), self.udp_target)
 
     def close_tcp_connection(self):
         """Closes the TCP connection and cleans up."""
@@ -291,7 +334,7 @@ class YAMCS_link(YAMCSContainer):
 ### Unit testing and usage #################################################################################
 
 if __name__ == '__main__':
-    from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32
+    from yamcs_userlib import YAMCSObject, telemetry, telecommand, event, U8, U16, F32
     from enum import Enum
 
     #Constants
@@ -322,7 +365,13 @@ if __name__ == '__main__':
         @telecommand
         def my_command(self, arg1: U16, arg2: F32) -> U8:
             logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
+            logging.info(f'Triggering event my_event')
+            self.my_event(arg1, arg2)
             return 0
+        
+        @event(EventSeverity.INFO)
+        def my_event(self, arg1 : U16, arg2 : F32) -> str:
+            return f'Dummy event triggered with arguments arg1={arg1} and arg2={arg2}'
         
     #initialisation
     yamcs_link = YAMCS_link("my_link", tcp_port=YAMCS_TC_PORT, udp_port=YAMCS_TM_PORT) 
