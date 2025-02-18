@@ -164,8 +164,8 @@ class YAMCSContainer(YAMCSObject):
             {
                 'name': arg_name, 
                 #the serder is used to generate tm packets, it only uses basic types so replace the enum type with a basic type if applicable
-                'type': self._get_potential_enum_repr_type(arg_type)
-            } for arg_name, arg_type in args.items()
+                'type': self._get_potential_enum_repr_type(arg_info['type'])
+            } for arg_name, arg_info in args.items()
         ]
         serder = SerDer(fields)
 
@@ -332,20 +332,46 @@ def telemetry(period=1):
     return decorator
 
 # Decorator for TC
-def telecommand(func):
+def telecommand(**kwargs):
     """
     Decorator to tag a YAMCSObject method as YAMCS telecommand
-    Usage: @telecommand AND you must use type hints with the predefined types below
+    Usage: 
+        you must use type hints with the predefined types below
+        AND
+            @telecommand()
+            OR
+            @telecommand(nameOfArg=[minAllowed, maxAllowed]) where minAllowed or maxAllowed can be None to indicate no bound  
         
     Return:
         decorated method
     """
-    #Tag the function as telecommand
-    func._is_yamcs_TC = True
-    #Store information that a YAMCSContainer will eventually compile
-    func._yamcs_args = {k: v.__name__ for k, v in func.__annotations__.items() if k != 'return'}
-    func._yamcs_enums = _extract_enums(func.__annotations__.values())
-    return func
+    def decorator(func):
+        # Tag the function as telecommand
+        func._is_yamcs_TC = True
+        
+        # Get the function's arguments
+        func_args = func.__annotations__.keys()
+        
+        # Check if all kwargs match function arguments
+        for arg in kwargs:
+            if arg not in func_args:
+                raise KeyError(f"Decorator argument '{arg}' does not match any function argument")
+        
+        # Store information that a YAMCSContainer will eventually compile
+        func._yamcs_args = {}
+        for k, v in func.__annotations__.items():
+            if k != 'return':
+                func._yamcs_args[k] = {
+                    'type': v.__name__,
+                    #For ranges, get them from the arguments of the decorator or None if there is no matching keyword argument there
+                    'min': kwargs.get(k, [None, None])[0],
+                    'max': kwargs.get(k, [None, None])[1]
+                }
+        
+        func._yamcs_enums = _extract_enums(func.__annotations__.values())
+        return func
+
+    return decorator
 
 ### Type definitions for type hints of decorated methods #################################################
 
