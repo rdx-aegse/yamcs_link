@@ -23,6 +23,11 @@ services:
         warmupTime: 60
   - class: org.yamcs.plists.ParameterListService
   - class: org.yamcs.timeline.TimelineService
+  - class: com.community.SimplestEventDecodingService
+    args:
+      stream: tm_stream
+      nBytesSource: 80
+      nBytesMsg: 256
 
 dataLinks:
   - name: tcp-out
