@@ -4,7 +4,7 @@ Python library to facilitate creating applications interacting with a YAMCS serv
 
 Example application:
 ```python
-from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32
+from yamcs_userlib import YAMCSObject, telemetry, telecommand, event, EventSeverity, U8, U16, F32
 from enum import Enum
 
 #Constants
@@ -32,10 +32,17 @@ class MyComponent(YAMCSObject):
     def my_telemetry2(self) -> U8:
         return 42
 
-    @telecommand
-    def my_command(self, arg1: U16, arg2: F32) -> U8:
-        logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
+    @telecommand(arg1=[5,10], arg3=[None,1000]) #restricts ranges on arg1 and arg3 (devel feature) 
+    def my_command(self, arg1: U16, arg2: F32, arg3: U32) -> U8:
+        logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}, {arg3}')
+
+        #Send event synchronously (devel feature)
+        self.my_event(arg1)
         return 0
+
+    @event(EventSeverity.INFO) #devel feature
+    def my_event(arg1: U16) -> str:
+        return f"Event triggered with arg1 {arg1}"
     
 #initialisation
 yamcs_link = YAMCS_link("my_link", tcp_port=YAMCS_TC_PORT, udp_port=YAMCS_TM_PORT) 
@@ -59,9 +66,11 @@ finally:
     yamcs_link.shutdown() 
 ```
 
-YAMCS_link runs the application, and any object inheriting from either YAMCSObject or YAMCSContainer can be registered in the link to attach its method tagged with the @telemetry or @telecommand decorators. Use YAMCSContainers if the application has hierarchical components that should be reflected in YAMCS, YAMCSObjects everywhere else. As long as the register_yamcs_child() chain is not broken between YAMCS_link and components, they will be connected to YAMCS. 
+YAMCS_link runs the application, and any object inheriting from either YAMCSObject or YAMCSContainer can be registered in the link to attach its method tagged with the @telemetry or @telecommand decorators. 
 
-Events are the natural next improvement which will be added later on as @event methods which are called from within the components to trigger events.  
+Use YAMCSContainers if the application has hierarchical components that should be reflected in YAMCS, YAMCSObjects everywhere else. As long as the register_yamcs_child() chain is not broken between YAMCS_link and components, they will be connected to YAMCS. 
+
+Events have been recently implemented and are sent synchronously on the same link as TM. That is, UDP - which is acceptable when there isn't a multi-path network between the application and the YAMCS server. TCP will be added later for events. 
 
 ## Getting started
  

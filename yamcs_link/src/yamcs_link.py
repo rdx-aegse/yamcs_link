@@ -103,14 +103,14 @@ class YAMCS_link(YAMCSContainer):
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._start_tcp_server()
         
-        # Set up signal handling for  graceful shutdown
+        # Set up signal handling for  graceful _shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
     def _signal_handler(self, sig, frame):
-        """Handles signals for graceful shutdown."""
+        """Handles signals for graceful _shutdown."""
         logging.info(f"Received signal {sig}. Shutting down...")
-        self.shutdown()
+        self._shutdown()
         sys.exit(0)
         
     def _start_tcp_server(self):
@@ -128,7 +128,7 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Error starting TCP server: {e}")
-            self.shutdown()
+            self._shutdown()
             sys.exit(1)
 
     def generate_mdb(self, output_dir: str, name_mdb: str, version: str):
@@ -163,8 +163,8 @@ class YAMCS_link(YAMCSContainer):
             tc_def = self.get_tc_def()
             for opcode, tc in tc_def.items():
                 command = mdb_generator.Command(name=tc['name'], opcode=opcode)
-                for arg_name, arg_type in tc['args'].items():
-                    command.addParam(arg_name, arg_type)
+                for arg_name, arg_info in tc['args'].items():
+                    command.addParam(arg_name, arg_info['type'], min=arg_info['min'], max=arg_info['max'])
                 mdb_generator.addTMTC(command)
 
             mdb_generator.generateCSVs()
@@ -173,7 +173,7 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Error generating mission database: {e}")
-            self.shutdown()
+            self._shutdown()
             sys.exit(1)
 
     def service(self):
@@ -203,7 +203,7 @@ class YAMCS_link(YAMCSContainer):
                     else:
                         # Connection closed
                         logging.info("Client disconnected.")
-                        self.close_tcp_connection()
+                        self._close_tcp_connection()
 
             # Service telemetry whenever the TCP link is active (i.e. YAMCS is connected)
             if self.tcp_client_socket:
@@ -211,7 +211,7 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Error in service loop: {e}")
-            self.close_tcp_connection()  
+            self._close_tcp_connection()  
 
     def send_telemetry(self):
         """
@@ -286,7 +286,7 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Command handling error: {e}")
-        
+       
     @override    
     def send_event(self, severity: EventSeverity, source: str, message: str):
         '''
@@ -308,17 +308,31 @@ class YAMCS_link(YAMCSContainer):
                 source,
                 message
             ]), self.udp_target)
+            
+    def _recursively_call_on_disconnect(self, obj):
+        """
+        Like the name suggests, call on_disconnect on all yamcs children
+        """
+        #Recursively call on_disconnect() on all children
+        for yamcs_child in obj.children:
+            if isinstance(yamcs_child, YAMCSContainer):
+                self._recursively_call_on_disconnect(yamcs_child)
+            
+            yamcs_child.on_disconnect()
 
-    def close_tcp_connection(self):
+    def _close_tcp_connection(self):
         """Closes the TCP connection and cleans up."""
         if self.tcp_client_socket:
+            self.monitored_sock.remove(self.tcp_client_socket)
             self.tcp_client_socket.close()
             self.tcp_client_socket = None
             logging.info("TCP connection closed.")
+            
+            self._recursively_call_on_disconnect(self)
 
-    def shutdown(self):
+    def _shutdown(self):
         """Shuts down the TCP server and UDP socket."""
-        self.close_tcp_connection()
+        self._close_tcp_connection()
 
         if self.tcp_server_socket:
             self.tcp_server_socket.close()
@@ -328,14 +342,15 @@ class YAMCS_link(YAMCSContainer):
             self.udp_socket.close()
             logging.info("UDP socket closed.")
 
-        logging.info("YAMCS_link shutdown complete.")
+        logging.info("YAMCS_link _shutdown complete.")
 
 
 ### Unit testing and usage #################################################################################
 
 if __name__ == '__main__':
-    from yamcs_userlib import YAMCSObject, telemetry, telecommand, event, U8, U16, F32
+    from yamcs_userlib import YAMCSObject, telemetry, telecommand, event, U8, U16, F32, I16
     from enum import Enum
+    from typing import override
 
     #Constants
     YAMCS_TC_PORT = 10000
@@ -353,6 +368,11 @@ if __name__ == '__main__':
     class MyComponent(YAMCSObject):
         def __init__(self, name):
             YAMCSObject.__init__(self, name)
+        
+        #Optional but highly recommended on_disconnect
+        @override
+        def on_disconnect(self):
+            logging.info(f'{self.yamcs_name} would now go back to safe state after YAMCS disconnected')
 
         @telemetry(1) #seconds period
         def my_telemetry1(self) -> MyEnum:
@@ -362,9 +382,9 @@ if __name__ == '__main__':
         def my_telemetry2(self) -> U8:
             return 42
 
-        @telecommand
-        def my_command(self, arg1: U16, arg2: F32) -> U8:
-            logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}')
+        @telecommand(arg1=[5,10], arg3=[None, 1000])
+        def my_command(self, arg1: U16, arg2: I16, arg3: F32) -> U8:
+            logging.info(f'MyComponent.my_command was invoked on {self.yamcs_name} with args {arg1}, {arg2}, {arg3}')
             logging.info(f'Triggering event my_event')
             self.my_event(arg1, arg2)
             return 0
@@ -392,4 +412,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         logging.info("Exiting main loop.")
     finally:
-        yamcs_link.shutdown() 
+        yamcs_link._shutdown() 
