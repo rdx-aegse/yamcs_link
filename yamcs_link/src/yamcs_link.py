@@ -82,14 +82,14 @@ class YAMCS_link(YAMCSContainer):
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._start_tcp_server()
         
-        # Set up signal handling for  graceful shutdown
+        # Set up signal handling for  graceful _shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
     def _signal_handler(self, sig, frame):
-        """Handles signals for graceful shutdown."""
+        """Handles signals for graceful _shutdown."""
         logging.info(f"Received signal {sig}. Shutting down...")
-        self.shutdown()
+        self._shutdown()
         sys.exit(0)
         
     def _start_tcp_server(self):
@@ -107,7 +107,7 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Error starting TCP server: {e}")
-            self.shutdown()
+            self._shutdown()
             sys.exit(1)
 
     def generate_mdb(self, output_dir: str, name_mdb: str, version: str):
@@ -152,7 +152,7 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Error generating mission database: {e}")
-            self.shutdown()
+            self._shutdown()
             sys.exit(1)
 
     def service(self):
@@ -182,7 +182,7 @@ class YAMCS_link(YAMCSContainer):
                     else:
                         # Connection closed
                         logging.info("Client disconnected.")
-                        self.close_tcp_connection()
+                        self._close_tcp_connection()
 
             # Service telemetry whenever the TCP link is active (i.e. YAMCS is connected)
             if self.tcp_client_socket:
@@ -190,7 +190,7 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Error in service loop: {e}")
-            self.close_tcp_connection()  
+            self._close_tcp_connection()  
 
     def send_telemetry(self):
         """
@@ -265,17 +265,31 @@ class YAMCS_link(YAMCSContainer):
 
         except Exception as e:
             logging.error(f"Command handling error: {e}")
+            
+    def _recursively_call_on_disconnect(self, obj):
+        """
+        Like the name suggests, call on_disconnect on all yamcs children
+        """
+        #Recursively call on_disconnect() on all children
+        for yamcs_child in obj.children:
+            if isinstance(yamcs_child, YAMCSContainer):
+                self._recursively_call_on_disconnect(yamcs_child)
+            
+            yamcs_child.on_disconnect()
 
-    def close_tcp_connection(self):
+    def _close_tcp_connection(self):
         """Closes the TCP connection and cleans up."""
         if self.tcp_client_socket:
+            self.monitored_sock.remove(self.tcp_client_socket)
             self.tcp_client_socket.close()
             self.tcp_client_socket = None
             logging.info("TCP connection closed.")
+            
+            self._recursively_call_on_disconnect(self)
 
-    def shutdown(self):
+    def _shutdown(self):
         """Shuts down the TCP server and UDP socket."""
-        self.close_tcp_connection()
+        self._close_tcp_connection()
 
         if self.tcp_server_socket:
             self.tcp_server_socket.close()
@@ -285,7 +299,7 @@ class YAMCS_link(YAMCSContainer):
             self.udp_socket.close()
             logging.info("UDP socket closed.")
 
-        logging.info("YAMCS_link shutdown complete.")
+        logging.info("YAMCS_link _shutdown complete.")
 
 
 ### Unit testing and usage #################################################################################
@@ -293,6 +307,7 @@ class YAMCS_link(YAMCSContainer):
 if __name__ == '__main__':
     from yamcs_userlib import YAMCSObject, telemetry, telecommand, U8, U16, F32
     from enum import Enum
+    from typing import override
 
     #Constants
     YAMCS_TC_PORT = 10000
@@ -310,6 +325,11 @@ if __name__ == '__main__':
     class MyComponent(YAMCSObject):
         def __init__(self, name):
             YAMCSObject.__init__(self, name)
+        
+        #Optional but highly recommended on_disconnect
+        @override
+        def on_disconnect(self):
+            logging.info(f'{self.yamcs_name} would now go back to safe state after YAMCS disconnected')
 
         @telemetry(1) #seconds period
         def my_telemetry1(self) -> MyEnum:
@@ -343,4 +363,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         logging.info("Exiting main loop.")
     finally:
-        yamcs_link.shutdown() 
+        yamcs_link._shutdown() 
