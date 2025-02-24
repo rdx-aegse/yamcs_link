@@ -164,7 +164,7 @@ class YAMCS_link(YAMCSContainer):
             # Select takes care of monitoring for incoming data in the monitored sockets
             # i.e. either the server socket (listening for connection requests) or the client socket
             # created after the connection's been accepted (listening for commands)
-            readable, _, _ = select.select(self.monitored_sock, [], [], 0.1)  # 100ms timeout; TODO: turn this into a constant
+            readable, _, _ = select.select(self.monitored_sock, [], [], 0)  # 0s timeout = do not block
 
             for sock in readable:
                 if sock is self.tcp_server_socket:
