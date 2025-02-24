@@ -24,11 +24,11 @@ class MyComponent(YAMCSObject):
     def __init__(self, name):
         YAMCSObject.__init__(self, name)
 
-    @telemetry(1) #seconds period
+    @telemetry(1000) #milliseconds period
     def my_telemetry1(self) -> MyEnum:
         return MyEnum.VALUE1.value
 
-    @telemetry(2) #seconds period
+    @telemetry(2000) #milliseconds period
     def my_telemetry2(self) -> U8:
         return 42
 

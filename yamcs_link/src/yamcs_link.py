@@ -205,7 +205,7 @@ class YAMCS_link(YAMCSContainer):
                     self.last_tm_send_time[period] = 0
 
                 #if this tm group is due for sending
-                if current_time - self.last_tm_send_time[period] >= period:
+                if current_time - self.last_tm_send_time[period] >= period/1000: #time.time() yields seconds, not ms
                     #Update and retrieve the serialised tm data (TODO: rename method) for that group
                     tm_data = self.get_tm_values(period)
                     if tm_data:
@@ -311,11 +311,11 @@ if __name__ == '__main__':
         def __init__(self, name):
             YAMCSObject.__init__(self, name)
 
-        @telemetry(1) #seconds period
+        @telemetry(1000) #milliseconds period
         def my_telemetry1(self) -> MyEnum:
             return MyEnum.VALUE1.value
 
-        @telemetry(2) #seconds period
+        @telemetry(2000) #milliseconds period
         def my_telemetry2(self) -> U8:
             return 42
 

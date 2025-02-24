@@ -231,7 +231,7 @@ class YAMCSContainer(YAMCSObject):
         Compile the values of all telemetry that was registered at the specified period interval into a single byte stream
         
         Args:
-            period: targeted period in seconds
+            period: targeted period in milliseconds
         
         Return:
             list of byte values
@@ -250,7 +250,7 @@ class YAMCSContainer(YAMCSObject):
         Get the list of different period intervals all the telemetry fall into after registration
         
         return
-            list of float (seconds)
+            list of float (milliseconds)
         """
         return self.telemetry.keys()
 
@@ -299,13 +299,13 @@ def _extract_enums(typeList: List[Any]) -> Dict[str, Dict[str, Any]]:
     return enums
 
 # Decorator for TM
-def telemetry(period=1):
+def telemetry(period=1000):
     """
     Decorator to tag a YAMCSObject method as YAMCS telemetry.
-    Usage: @telemetry() or @telemetry(1) or @telemetry(period=1) AND you must use type hints with the predefined types below
+    Usage: @telemetry() or @telemetry(1000) or @telemetry(period=1000) AND you must use type hints with the predefined types below
     
     Args:
-        period: interval at which the telemetry will be declared to be acquired, in seconds (optional)
+        period: interval at which the telemetry will be declared to be acquired, in milliseconds (optional)
         
     Return:
         decorated method
