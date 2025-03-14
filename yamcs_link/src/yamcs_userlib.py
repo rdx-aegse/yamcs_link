@@ -19,9 +19,17 @@ Created on: Thu Feb 13 16:46:35 2025
 from typing import NewType, List, Any, Dict, Union
 from enum import Enum
 from collections import defaultdict
-from utils import SerDer
+from .utils import SerDer
 
 ### Public class definitions ###################################################################################
+
+class EventSeverity(Enum):
+    INFO = 0
+    WATCH = 1
+    WARNING = 2
+    DISTRESS = 3
+    CRITICAL = 4
+    SEVERE = 5
 
 class YAMCSObject:
     """
@@ -37,6 +45,12 @@ class YAMCSObject:
         """
         # TODO: enforce allowed characters
         self.yamcs_name = name
+        
+    def on_disconnect(self):
+        '''
+        Called when YAMCS is disconnected, meant for the yamcs object to get back to a safe state upon disconnection.
+        '''
+        pass
 
 class YAMCSContainer(YAMCSObject):
     """
@@ -57,6 +71,7 @@ class YAMCSContainer(YAMCSObject):
             name (str): See YAMCSObject.__init__
         """
         super().__init__(name)
+        self.parent = None
         self.children = []
         self.telemetry = {} #See _register_telemetry for schema
         self.commands = [] #See _register_command for schema
@@ -68,6 +83,7 @@ class YAMCSContainer(YAMCSObject):
         Args:
             child (YAMCSObject): The child YAMCS object.
         """
+        child.parent = self #to send events up the chain
         self.children.append(child)
 
     def update_index(self):
@@ -158,8 +174,8 @@ class YAMCSContainer(YAMCSObject):
             {
                 'name': arg_name, 
                 #the serder is used to generate tm packets, it only uses basic types so replace the enum type with a basic type if applicable
-                'type': self._get_potential_enum_repr_type(arg_type)
-            } for arg_name, arg_type in args.items()
+                'type': self._get_potential_enum_repr_type(arg_info['type'])
+            } for arg_name, arg_info in args.items()
         ]
         serder = SerDer(fields)
 
@@ -283,6 +299,21 @@ class YAMCSContainer(YAMCSObject):
         deserialized_args = cmd['serder'].deserialise(arg_data, exact_length=True)
         return cmd['bndmethod'](**deserialized_args)
     
+    def send_event(self, severity : EventSeverity, source: str, message : str):
+        '''
+        Send an event, either up the chain, or to YAMCS if at the top of the chain (is overriden by subclass YAMCS_link).
+        Called by the @event decorator when a tagged method is called. 
+        
+        Args:
+            severity: severity of the event picked among the values of EventSeverity that match the YAMCS severity definitions
+            source: full path of the source object in the YAMCSContainers/YAMCSObjects hierarchy
+            message: the message of the event (pre-formatted), as obtained from the methods tagged by @event decorators
+        '''
+        if(self.parent is not None):
+            self.parent.send_event(severity, source, message)
+        else:
+            raise NotImplementedError("The root YAMCSContainer has to override send_event for events to be sent to YAMCS")
+    
 ### Decorators and decorator helpers ########################################################################
 
 def _extract_enums(typeList: List[Any]) -> Dict[str, Dict[str, Any]]:
@@ -326,20 +357,66 @@ def telemetry(period=1000):
     return decorator
 
 # Decorator for TC
-def telecommand(func):
+def telecommand(**kwargs):
     """
     Decorator to tag a YAMCSObject method as YAMCS telecommand
-    Usage: @telecommand AND you must use type hints with the predefined types below
+    Usage: 
+        you must use type hints with the predefined types below
+        AND
+            @telecommand()
+            OR
+            @telecommand(nameOfArg=[minAllowed, maxAllowed]) where minAllowed or maxAllowed can be None to indicate no bound  
         
     Return:
         decorated method
     """
-    #Tag the function as telecommand
-    func._is_yamcs_TC = True
-    #Store information that a YAMCSContainer will eventually compile
-    func._yamcs_args = {k: v.__name__ for k, v in func.__annotations__.items() if k != 'return'}
-    func._yamcs_enums = _extract_enums(func.__annotations__.values())
-    return func
+    def decorator(func):
+        # Tag the function as telecommand
+        func._is_yamcs_TC = True
+        
+        # Get the function's arguments
+        func_args = func.__annotations__.keys()
+        
+        # Check if all kwargs match function arguments
+        for arg in kwargs:
+            if arg not in func_args:
+                raise KeyError(f"Decorator argument '{arg}' does not match any function argument")
+        
+        # Store information that a YAMCSContainer will eventually compile
+        func._yamcs_args = {}
+        for k, v in func.__annotations__.items():
+            if k != 'return':
+                func._yamcs_args[k] = {
+                    'type': v.__name__,
+                    #For ranges, get them from the arguments of the decorator or None if there is no matching keyword argument there
+                    'min': kwargs.get(k, [None, None])[0],
+                    'max': kwargs.get(k, [None, None])[1]
+                }
+        
+        func._yamcs_enums = _extract_enums(func.__annotations__.values())
+        return func
+
+    return decorator
+
+#decorator for events
+def event(severity: EventSeverity):
+    '''
+    Decorator to tag a YAMCSObject method as a YAMCS event
+    Usage: @event(EventSeverity.<VALUE>), then return the f-string of the message formatted with the method's arguments
+    
+    Args:
+        severity of the event
+    '''
+    # Decorator factory: Creates a decorator with specified severity
+    def decorator(func):
+        # Actual decorator: replaces the function with the wrapper
+        def wrapper(self, *args, **kwargs):
+            #Gets the message and sends the event applying the specified severity
+            message = func(self, *args, **kwargs)
+            self.parent.send_event(severity, self.yamcs_name, message)
+            return message
+        return wrapper
+    return decorator
 
 ### Type definitions for type hints of decorated methods #################################################
 
