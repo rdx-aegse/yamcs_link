@@ -22,7 +22,7 @@ import logging
 from typing import override
 
 from yamcs_userlib import YAMCSContainer, EventSeverity
-from yamcs_mdb_gen import YAMCSMDBGen
+from yamcs_mdb_generator.yamcs_mdb_gen import YAMCSMDBGen
 from utils import SerDer
 
 # Configure logging - TODO: feels odd having this here, to be checked
