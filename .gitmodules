@@ -1,0 +1,3 @@
+[submodule "yamcs_mdb_generator"]
+	path = yamcs_mdb_generator
+	url = git@github.com:rdx-aegse/yamcs_mdb_generator.git
