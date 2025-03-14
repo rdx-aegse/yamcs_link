@@ -21,9 +21,9 @@ import sys
 import logging
 from typing import override
 
-from .yamcs_userlib import YAMCSContainer, EventSeverity
-from .yamcs_mdb_gen import YAMCSMDBGen
-from .utils import SerDer
+from yamcs_userlib import YAMCSContainer, EventSeverity
+from yamcs_mdb_gen import YAMCSMDBGen
+from utils import SerDer
 
 # Configure logging - TODO: feels odd having this here, to be checked
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -154,7 +154,7 @@ class YAMCS_link(YAMCSContainer):
             # Add TM packets
             tm_def = self.get_tm_def()
             for i, (period, tm_list) in enumerate(tm_def.items()):
-                packet = mdb_generator.TMPacket(name=f'tm-{self.yamcs_name}-{period}s', id=i, frequency=period)  #TODO: fix YAMCSMDBGen, it's not a frequency
+                packet = mdb_generator.TMPacket(name=f'tm-{self.yamcs_name}-{period}ms', id=i, frequency=period)  #TODO: fix YAMCSMDBGen, it's not a frequency
                 for tm in tm_list:
                     packet.addParam(tm['name'], tm['type'])
                 mdb_generator.addTMTC(packet)

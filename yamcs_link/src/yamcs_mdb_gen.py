@@ -8,7 +8,7 @@ See YAMCSMDBGen description
 
 ### Imports #########################################################################################
 
-from typing import List, Tuple, Dict, Union, Any, Optional
+from typing import List, Tuple, Dict, Union, Any
 import re
 
 ### Main class definition ##################################################################################
@@ -219,22 +219,22 @@ class YAMCSMDBGen:
         '''
         Specialisation for a TM packet
         '''
-        def __init__(self, name: str, id: Optional[int] = None, period_ms=None):
+        def __init__(self, name: str, id: int, frequency=None):
             '''
             Parameters
             name: name of the packet
             id: id of the packet
-            period_ms: expected period in milliseconds for this packet (leave to None if no need to detect when packets have stopped refreshing)
+            frequency: expected frequency for this packet (leave to None if no need to detect when packets have stopped refreshing)
             '''
             super().__init__(name)
             self.id = id
-            self.period_ms = period_ms
+            self.freq = frequency
 
     class Command(TMTCEntry):
         '''
         Specialisation for a command
         '''
-        def __init__(self, name: str, opcode: Optional[int] = None):
+        def __init__(self, name: str, opcode: str):
             '''
             Parameters
             name: name of the command
@@ -258,7 +258,7 @@ class YAMCSMDBGen:
         "I64": ("int", "int", "64"),
         "F32": ("float", "float", "32"),
         "F64": ("float", "float", "64"),
-        "string(\d+)": ("string","string","8*{}") #This one has a regex pattern and a formula around the captured value
+        r"string(\d+)": ("string","string","8*{}") #This one has a regex pattern and a formula around the captured value
     }
     
     #In TYPES_MAP, which type those variables are represented by. 
@@ -269,6 +269,8 @@ class YAMCSMDBGen:
     PACKETTYPE_TYPE = 'U32'
     #The value of the packet type for TM packets. Required to write in the mission database which packets should be captured
     PACKETTYPE_TLM = 1
+    #Same for events (even if this value is not used here, this centralises changes as it is used by yamcs_link.py). TODO: turn this into a dict
+    PACKETTYPE_EVENT = 2
     
     #YAMCS doesn't support certain characters in parameter names etc. Use this map to make replacements in all names.
     #Currently cannot include [ ] { } ;
@@ -306,32 +308,20 @@ class YAMCSMDBGen:
             if 'string' not in name:
                 self.addPrimitiveType(name)
     
-    def addTMTC(self, tmtc: TMTCEntry) -> int:
+    def addTMTC(self, tmtc: TMTCEntry) -> None:
         '''
         Add either a command or a TM packet
         Parameters
-            tmtc: the pre-filled command or TM packet
-        
-        Returns:
-            the packet ID or opcode
+        tmtc: the pre-filled command or TM packet
         '''
         if isinstance(tmtc, YAMCSMDBGen.Command):
-            #Handle when an opcode hasn't been provided: either initialise at 0, or use the last command's opcode+1
-            if(tmtc.opcode is None):
-                tmtc.opcode = 0 if len(self.commands) == 0 else self.commands[-1].opcode+1
             self.commands.append(tmtc)
-            
-            return tmtc.opcode
         else:
             if isinstance(tmtc, YAMCSMDBGen.TMPacket):
-                #Same for packets
-                if(tmtc.id is None):
-                    tmtc.id = 0 if len(self.TMpackets) == 0 else self.TMpackets[-1].opcode+1
                 self.TMpackets.append(tmtc)
-                
-                return tmtc.id
             else:
                 raise Exception('Expecting TM packet or command')
+        
     
     def addPrimitiveType(self, paramType: str) -> None:
         '''
@@ -459,7 +449,7 @@ class YAMCSMDBGen:
         headers = {
             "General": "format version,name,document version",
             "DataTypes": "type name,eng type,raw type,encoding,eng unit,calibration,description",
-            "Containers": "container name,parent,condition,flags,entry,position,size in bits,expected interval (ms),description\n"+
+            "Containers": "container name,parent,condition,flags,entry,position,size in bits,expected interval,description\n"+
                           "PKT,,,,,,,\n"+
                           ",,,,PacketType,0,,\n"+
                           ",,,,PacketID,0,,\n",
@@ -478,7 +468,7 @@ class YAMCSMDBGen:
             "Containers_packet": "{packetName},"+
                                  f"PKT:{int(YAMCSMDBGen.TYPES_MAP[YAMCSMDBGen.PACKETTYPE_TYPE][2])+int(YAMCSMDBGen.TYPES_MAP[YAMCSMDBGen.PACKETID_TYPE][2])}"+ 
                                  f",&(PacketType=={YAMCSMDBGen.PACKETTYPE_TLM}"+
-                                 ";PacketID=={packetID}),,,,,{period_ms}",
+                                 ";PacketID=={packetID}),,,,,{freq}",
             "Containers_param": ",,,,{name},0,,,",
             "Parameters_param": "{name},{type},,",
             "Calibration_start": "{name},{kind},{calib1},{calib2}",
@@ -513,7 +503,7 @@ class YAMCSMDBGen:
             containersLines.append(templates["Containers_packet"].format(
                                                                             packetName=packet.name,
                                                                             packetID=packet.id,
-                                                                            period_ms="" if packet.period_ms is None else packet.period_ms
+                                                                            freq="" if packet.freq is None else packet.freq
                                                                         ))
             #All other lines
             for param in packet.params:

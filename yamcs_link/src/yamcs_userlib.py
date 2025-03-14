@@ -19,7 +19,7 @@ Created on: Thu Feb 13 16:46:35 2025
 from typing import NewType, List, Any, Dict, Union
 from enum import Enum
 from collections import defaultdict
-from .utils import SerDer
+from utils import SerDer
 
 ### Public class definitions ###################################################################################
 
@@ -330,7 +330,7 @@ def _extract_enums(typeList: List[Any]) -> Dict[str, Dict[str, Any]]:
     return enums
 
 # Decorator for TM
-def telemetry(period=1000):
+def telemetry(period_ms=1000):
     """
     Decorator to tag a YAMCSObject method as YAMCS telemetry.
     Usage: @telemetry() or @telemetry(1000) or @telemetry(period=1000) AND you must use type hints with the predefined types below
@@ -346,7 +346,7 @@ def telemetry(period=1000):
         func._is_yamcs_TM = True
         
         #Store information that a YAMCSContainer will eventually compile
-        func._refresh_period = period
+        func._refresh_period = period_ms
         return_type = func.__annotations__.get('return')
         if return_type is None:
             raise ValueError(f"Telemetry function {func.__name__} must have a return type annotation")
@@ -496,7 +496,7 @@ if __name__ == '__main__':
     # Demonstrate get_tm_values
     print("\n===Telemetry Values===")
     for period in root.get_tm_periods():
-        print(f"For period: {period}s, packet = {root.get_tm_values(period)}")  # Print the byte representation
+        print(f"For period: {period}ms, packet = {root.get_tm_values(period)}")  # Print the byte representation
 
     # Demonstrate get_tc_def
     print("\n===Telecommand Definitions===")
