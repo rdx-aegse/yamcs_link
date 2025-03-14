@@ -1,6 +1,0 @@
-[submodule "yamcs_link/src/yamcs-mdb-generator"]
-	path = yamcs_link/src/yamcs-mdb-generator
-	url = git@github.com:rdx-aegse/yamcs-mdb-generator.git
-[submodule "yamcs_link/src/yamcs_mdb_generator"]
-	path = yamcs_link/src/yamcs_mdb_generator
-	url = git@github.com:rdx-aegse/yamcs_mdb_generator.git
