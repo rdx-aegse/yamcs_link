@@ -185,7 +185,7 @@ class YAMCS_link(YAMCSContainer):
             # Select takes care of monitoring for incoming data in the monitored sockets
             # i.e. either the server socket (listening for connection requests) or the client socket
             # created after the connection's been accepted (listening for commands)
-            readable, _, _ = select.select(self.monitored_sock, [], [], 0.1)  # 100ms timeout; TODO: turn this into a constant
+            readable, _, _ = select.select(self.monitored_sock, [], [], 0)  # 0s timeout = do not block
 
             for sock in readable:
                 if sock is self.tcp_server_socket:
@@ -226,7 +226,7 @@ class YAMCS_link(YAMCSContainer):
                     self.last_tm_send_time[period] = 0
 
                 #if this tm group is due for sending
-                if current_time - self.last_tm_send_time[period] >= period:
+                if current_time - self.last_tm_send_time[period] >= period/1000: #time.time() yields seconds, not ms
                     #Update and retrieve the serialised tm data (TODO: rename method) for that group
                     tm_data = self.get_tm_values(period)
                     if tm_data:
@@ -374,11 +374,11 @@ if __name__ == '__main__':
         def on_disconnect(self):
             logging.info(f'{self.yamcs_name} would now go back to safe state after YAMCS disconnected')
 
-        @telemetry(1) #seconds period
+        @telemetry(1000) #milliseconds period
         def my_telemetry1(self) -> MyEnum:
             return MyEnum.VALUE1.value
 
-        @telemetry(2) #seconds period
+        @telemetry(2000) #milliseconds period
         def my_telemetry2(self) -> U8:
             return 42
 
