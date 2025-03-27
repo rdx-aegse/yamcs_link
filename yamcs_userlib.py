@@ -19,7 +19,7 @@ Created on: Thu Feb 13 16:46:35 2025
 from typing import NewType, List, Any, Dict, Union
 from enum import Enum
 from collections import defaultdict
-from utils import SerDer
+from .utils import SerDer
 
 ### Public class definitions ###################################################################################
 

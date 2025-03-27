@@ -21,9 +21,9 @@ import sys
 import logging
 from typing import override
 
-from yamcs_userlib import YAMCSContainer, EventSeverity
-from yamcs_mdb_generator.yamcs_mdb_gen import YAMCSMDBGen
-from utils import SerDer
+from .yamcs_userlib import YAMCSContainer, EventSeverity
+from .yamcs_mdb_generator.yamcs_mdb_gen import YAMCSMDBGen
+from .utils import SerDer
 
 # Configure logging - TODO: feels odd having this here, to be checked
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
