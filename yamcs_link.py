@@ -64,7 +64,7 @@ class YAMCS_link(YAMCSContainer):
     EVENT_PACKET_FORMAT = [
         {'name': 'PacketType', 'type': YAMCSMDBGen.PACKETTYPE_TYPE}, #PacketType, to allow multiplexing events and TM
         {'name': 'PacketID', 'type': YAMCSMDBGen.PACKETID_TYPE}, #PacketID, to comply with the same abstract packet format of TM when they go through the same preprocessor
-        {'name': 'severity', 'type': 'U8'}, #Severity among yamcs_userlib.EventSeverity enum
+        {'name': 'severity', 'type': 'U32'}, #Severity among yamcs_userlib.EventSeverity enum
         {'name': 'source', 'type': EVENT_SOURCESTR_TYPE}, #Name of the source of the event
         {'name': 'message', 'type': EVENT_MSG_TYPE}, #Formatted message for the event
     ]
