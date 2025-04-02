@@ -23,13 +23,15 @@ from .utils import SerDer
 
 ### Public class definitions ###################################################################################
 
+#Adapted from the awkward names in org.yamcs.Event.EventSeverity
 class EventSeverity(Enum):
     INFO = 0
-    WATCH = 1
-    WARNING = 2
-    DISTRESS = 3
-    CRITICAL = 4
-    SEVERE = 5
+    WARNING = 1
+    ERROR = 2
+    ALERT = 3
+    DISTRESS = 5
+    CRITICAL = 6
+    FATAL = 7
 
 class YAMCSObject:
     """
