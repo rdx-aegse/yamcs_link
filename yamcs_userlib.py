@@ -31,30 +31,9 @@ class EventSeverity(Enum):
     ALERT = 3
     DISTRESS = 5
     CRITICAL = 6
-    FATAL = 7
+    FATAL = 7        
 
-class YAMCSObject:
-    """
-    Base class for any object that will declare telemetry and telecommands.
-    Necessary to name all TM and TC
-    """
-    def __init__(self, name):
-        """
-        Initializes a YAMCSObject with a name.
-
-        Args:
-            name (str): The name of the YAMCS object. Only use letters, numbers and underscores
-        """
-        # TODO: enforce allowed characters
-        self.yamcs_name = name
-        
-    def on_disconnect(self):
-        '''
-        Called when YAMCS is disconnected, meant for the yamcs object to get back to a safe state upon disconnection.
-        '''
-        pass
-
-class YAMCSContainer(YAMCSObject):
+class YAMCS_object:
     """
     Container for YAMCS objects (telemetry, telecommands).
     Can be used as an intermediate container to automatically name TM and TC in a hierarchical way, 
@@ -67,23 +46,23 @@ class YAMCSContainer(YAMCSObject):
     
     def __init__(self, name: str):
         """
-        Initializes a YAMCSContainer with a name.
+        Initializes a YAMCS_object with a name.
 
         Args:
-            name (str): See YAMCSObject.__init__
+            name (str): The name of the YAMCS object. Only use letters, numbers and underscores
         """
-        super().__init__(name)
+        self.yamcs_name = name
         self.parent = None
         self.children = []
         self.telemetry = {} #See _register_telemetry for schema
         self.commands = [] #See _register_command for schema
 
-    def register_yamcs_child(self, child: YAMCSObject):
+    def register_yamcs_child(self, child: 'YAMCS_object'): #Because class is not completely defined yet - resolve later type hint
         """
         Registers a YAMCS object as a child of this container. Can be another container. 
 
         Args:
-            child (YAMCSObject): The child YAMCS object.
+            child (YAMCS_object): The child YAMCS object.
         """
         child.parent = self #to send events up the chain
         self.children.append(child)
@@ -95,33 +74,32 @@ class YAMCSContainer(YAMCSObject):
         """
         self.telemetry = defaultdict(list)
         self.commands = []
-        self._build_index(self, "") #Not a typo, build index starts with this YAMCSContainer as root
+        self._build_index(self, "") #Not a typo, build index starts with this YAMCS_object as root
 
-    def _build_index(self, obj: YAMCSObject, prefix: str):
+    def _build_index(self, obj: 'YAMCS_object', prefix: str): #Because class is not completely defined yet - resolve later type hint
         """
         Recursively builds the index of telemetry and telecommands. See update_index for reason
         
         Args:
-            obj: YAMCSObject to analyse
+            obj: YAMCS_object to analyse
             prefix: string which will be prepended to the full name of tm and tc, representing all parents
         """
-        if isinstance(obj, YAMCSContainer):
-            #If analysing a container, dive into it by recursion, adding to the full hierarchical name
-            for child in obj.children:
-                self._build_index(child, prefix + obj.yamcs_name + "-")
-        else:
-            #Find methods in the analysed object which are tagged with a telemetry or telecommand decorator 
-            #and call the appropriate registration function
-            registration_methods = {
-                '_is_yamcs_TM': self._register_telemetry,
-                '_is_yamcs_TC': self._register_command
-            }
-            for method_name in dir(obj):
-                bound_method = getattr(obj, method_name)
-                for attribute, registration_function in registration_methods.items():
-                    if hasattr(bound_method, attribute):
-                        fullname = prefix + obj.yamcs_name + "-" + method_name
-                        registration_function(bound_method, fullname)
+        #If analysing a container, dive into it by recursion, adding to the full hierarchical name
+        for child in obj.children:
+            self._build_index(child, prefix + obj.yamcs_name + "-")
+            
+        #Find methods in the analysed object which are tagged with a telemetry or telecommand decorator 
+        #and call the appropriate registration function
+        registration_methods = {
+            '_is_yamcs_TM': self._register_telemetry,
+            '_is_yamcs_TC': self._register_command
+        }
+        for method_name in dir(obj):
+            bound_method = getattr(obj, method_name)
+            for attribute, registration_function in registration_methods.items():
+                if hasattr(bound_method, attribute):
+                    fullname = prefix + obj.yamcs_name + "-" + method_name
+                    registration_function(bound_method, fullname)
 
     def _register_telemetry(self, bound_method, fullname: str):
         """
@@ -253,9 +231,9 @@ class YAMCSContainer(YAMCSObject):
         
         Return:
             list of byte values
-        """
+        """        
         values = []
-        for tm in self.telemetry[period]:
+        for tm in self.telemetry[period]:            
             serialized = tm['serder'].serialise([
                 #SerDer will expect the enum represetnation type, so it is necessary to cast enums to that representation type
                 self._cast_potential_enum_val(tm['bndmethod']())
@@ -308,13 +286,19 @@ class YAMCSContainer(YAMCSObject):
         
         Args:
             severity: severity of the event picked among the values of EventSeverity that match the YAMCS severity definitions
-            source: full path of the source object in the YAMCSContainers/YAMCSObjects hierarchy
+            source: full path of the source object in the YAMCS_objects/YAMCS_objects hierarchy
             message: the message of the event (pre-formatted), as obtained from the methods tagged by @event decorators
         '''
         if(self.parent is not None):
             self.parent.send_event(severity, source, message)
         else:
-            raise NotImplementedError("The root YAMCSContainer has to override send_event for events to be sent to YAMCS")
+            raise NotImplementedError("The root YAMCS_object has to override send_event for events to be sent to YAMCS")
+        
+    def on_disconnect(self):
+        '''
+        Called when YAMCS is disconnected, meant for the yamcs object to get back to a safe state upon disconnection.
+        '''
+        pass
     
 ### Decorators and decorator helpers ########################################################################
 
@@ -334,7 +318,7 @@ def _extract_enums(typeList: List[Any]) -> Dict[str, Dict[str, Any]]:
 # Decorator for TM
 def telemetry(period_ms=1000):
     """
-    Decorator to tag a YAMCSObject method as YAMCS telemetry.
+    Decorator to tag a YAMCS_object method as YAMCS telemetry.
     Usage: @telemetry() or @telemetry(1000) or @telemetry(period=1000) AND you must use type hints with the predefined types below
     
     Args:
@@ -347,7 +331,7 @@ def telemetry(period_ms=1000):
         #Tag the function as telemetry
         func._is_yamcs_TM = True
         
-        #Store information that a YAMCSContainer will eventually compile
+        #Store information that a YAMCS_object will eventually compile
         func._refresh_period = period_ms
         return_type = func.__annotations__.get('return')
         if return_type is None:
@@ -361,7 +345,7 @@ def telemetry(period_ms=1000):
 # Decorator for TC
 def telecommand(**kwargs):
     """
-    Decorator to tag a YAMCSObject method as YAMCS telecommand
+    Decorator to tag a YAMCS_object method as YAMCS telecommand
     Usage: 
         you must use type hints with the predefined types below
         AND
@@ -384,7 +368,7 @@ def telecommand(**kwargs):
             if arg not in func_args:
                 raise KeyError(f"Decorator argument '{arg}' does not match any function argument")
         
-        # Store information that a YAMCSContainer will eventually compile
+        # Store information that a YAMCS_object will eventually compile
         func._yamcs_args = {}
         for k, v in func.__annotations__.items():
             if k != 'return':
@@ -403,7 +387,7 @@ def telecommand(**kwargs):
 #decorator for events
 def event(severity: EventSeverity):
     '''
-    Decorator to tag a YAMCSObject method as a YAMCS event
+    Decorator to tag a YAMCS_object method as a YAMCS event
     Usage: @event(EventSeverity.<VALUE>), then return the f-string of the message formatted with the method's arguments
     
     Args:
@@ -446,9 +430,9 @@ if __name__ == '__main__':
         VALUE3 = 3
         VALUE4 = 4
 
-    class MyComponent(YAMCSObject):
+    class MyComponent(YAMCS_object):
         def __init__(self, name):
-            YAMCSObject.__init__(self, name)
+            YAMCS_object.__init__(self, name)
 
         @telemetry(1)
         def my_telemetry1(self) -> MyEnum:
@@ -462,9 +446,9 @@ if __name__ == '__main__':
         def my_command(self, arg1: U16, arg2: F32, arg3: MyEnum2) -> None:
             print(f'MyComponent.my_command was invoked on {self.name} with args {arg1}, {arg2}, {arg3}')
 
-    class AnotherComponent(YAMCSObject):
+    class AnotherComponent(YAMCS_object):
         def __init__(self, name):
-            YAMCSObject.__init__(self, name)
+            YAMCS_object.__init__(self, name)
 
         @telemetry(1)
         def my_telemetry1(self) -> U32:
@@ -474,16 +458,14 @@ if __name__ == '__main__':
         def my_telemetry2(self) -> U32:
             return 42
 
-    root = YAMCSContainer("")
-    container = YAMCSContainer("container")
+    root = YAMCS_object("")
     component1 = MyComponent("component1")
     component2 = AnotherComponent("component2")
     component1b = MyComponent("component1b")
 
-    root.register_yamcs_child(container)
-    container.register_yamcs_child(component1)
-    container.register_yamcs_child(component2)
-    container.register_yamcs_child(component1b)
+    root.register_yamcs_child(component1)
+    root.register_yamcs_child(component2)
+    root.register_yamcs_child(component1b)
 
     root.update_index()
 

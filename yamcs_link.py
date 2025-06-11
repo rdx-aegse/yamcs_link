@@ -19,9 +19,9 @@ import time
 import signal
 import sys
 import logging
-from typing import override
+from overrides import override
 
-from .yamcs_userlib import YAMCSContainer, EventSeverity
+from .yamcs_userlib import YAMCS_object, EventSeverity
 from .yamcs_mdb_generator.yamcs_mdb_gen import YAMCSMDBGen
 from .utils import SerDer
 
@@ -30,9 +30,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 ### Public classes #############################################################################################################
 
-class YAMCS_link(YAMCSContainer):
+class YAMCS_link(YAMCS_object):
     """
-    A class to manage the link between a YAMCSContainer and YAMCS, handling
+    A class to manage the link between a YAMCS_object and YAMCS, handling
     telemetry sending and telecommand receiving in a single-threaded manner.
     """
 
@@ -74,7 +74,7 @@ class YAMCS_link(YAMCSContainer):
 
     def __init__(self, name : str, tcp_port: int, udp_port: int):
         """
-        Initializes the YAMCS_link with a YAMCSContainer and TCP/UDP ports.
+        Initializes the YAMCS_link with a YAMCS_object and TCP/UDP ports.
 
         Args:
             name: the name of the yamcs_link, will become the root of the full name of tm and tc
@@ -290,7 +290,7 @@ class YAMCS_link(YAMCSContainer):
     @override    
     def send_event(self, severity: EventSeverity, source: str, message: str):
         '''
-        When a method tagged by the @event decorator gets called, send_event() in the base class YAMCSCOntainer just passes the event up the chain. 
+        When a method tagged by the @event decorator gets called, send_event() in the base class YAMCS_object just passes the event up the chain. 
         This override is meant to actually send the event to YAMCS when it the event has reached this point in the chain.
         
         Args:
@@ -315,7 +315,7 @@ class YAMCS_link(YAMCSContainer):
         """
         #Recursively call on_disconnect() on all children
         for yamcs_child in obj.children:
-            if isinstance(yamcs_child, YAMCSContainer):
+            if isinstance(yamcs_child, YAMCS_object):
                 self._recursively_call_on_disconnect(yamcs_child)
             
             yamcs_child.on_disconnect()
